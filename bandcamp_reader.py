@@ -9,9 +9,24 @@ from googleapiclient.discovery import build
 
 import sqlite3
 
+import argparse
+import html
+import json
+import os
+import re
+import requests
+import sys
+
+from collections import namedtuple
+
+from campdown import Downloader
+
+from tqdm import tqdm
+
 class BandcampReader():
 
-    def __init__(self) -> None:
+    def __init__(self)->None:        
+        
         #AUTH PART
         #ICI ON VERIFIE ET CREE SI IL MANQUE LE TOKEN QUI NOUS PERMET
         #D'ACCEDER A L'API
@@ -54,12 +69,9 @@ class BandcampReader():
         else:
             print("Table links has been found. Connecting now !")
         cursor_links.close()
-            
-
-    def create_database(self):
-        pass
 
     def load_releases(self, verbose = False):
+        
         # Call the Gmail API
         service = build('gmail', 'v1', credentials=self.creds)
         mails = service.users().messages().list(userId='me',q="label:bandcamp-releases subject:'new+release'", maxResults=500).execute()
@@ -102,3 +114,18 @@ class BandcampReader():
             else:
                 if verbose: print(f"Release {msg['id']} is already in the DB.")
         return None
+
+    def download_links(self)->None:
+        cursor_links = self.db_links.cursor()
+        query = """ 
+            SELECT *
+            FROM links;"""
+        links = cursor_links.execute(query).fetchall()
+        cursor_links.close()
+        for l in tqdm(links[:]):
+            downloader = Downloader(
+                url = l[1],
+                out = "output/",
+                verbose=True,
+                art_enabled=False)
+            downloader.run()
