@@ -59,33 +59,46 @@ class BandcampReader():
     def create_database(self):
         pass
 
-    def get_content(self):
+    def load_releases(self, verbose = False):
         # Call the Gmail API
         service = build('gmail', 'v1', credentials=self.creds)
         mails = service.users().messages().list(userId='me',q="label:bandcamp-releases subject:'new+release'", maxResults=500).execute()
-        cursor_links = self.db_links.cursor()
         messages = mails.get('messages')
         # messages is a list of dictionaries where each dictionary contains a message id.
         # iterate through all the messages
-        for msg in messages[:10]:
-            # Get the message from its id
-            txt = service.users().messages().get(userId='me', id=msg['id']).execute()
-            # Get value of 'payload' from dictionary 'txt'
-            payload = txt['payload']
-            # The Body of the message is in Encrypted format. So, we have to decode it.
-            # Get the data and decode it with base 64 decoder.
-            parts = payload.get('parts')[0]
-            data = parts['body']['data']
-            data = data.replace("-","+").replace("_","/")
-            decoded_data = base64.b64decode(data)
-            soup = BeautifulSoup(decoded_data , "lxml")
-            links = str(soup.findAll("p")[0]).splitlines()
-            msg_id = msg['id']
-            first_link = [link.split('?')[0] for link in links if link[:5]=="https"][0]
-            query = """ INSERT INTO links(mail_id, link)
-                        VALUES(?,?);"""
-            cursor_links = self.db_links.cursor()
-            cursor_links.execute(query, (msg_id, first_link))
-            self.db_links.commit()
-            cursor_links.close()
+
+        # En premier on va récuperer la liste
+        # Des id déjà existants dans la BDD
+
+        cursor_links = self.db_links.cursor()
+        query = """ 
+                SELECT mail_id
+                FROM LINKS"""
+        ids = [id[0]for id in cursor_links.execute(query).fetchall()]
+        cursor_links.close()
+        for msg in messages[:]:
+            if msg['id'] not in ids:
+                # Get the message from its id
+                txt = service.users().messages().get(userId='me', id=msg['id']).execute()
+                # Get value of 'payload' from dictionary 'txt'
+                payload = txt['payload']
+                # The Body of the message is in Encrypted format. So, we have to decode it.
+                # Get the data and decode it with base 64 decoder.
+                parts = payload.get('parts')[0]
+                data = parts['body']['data']
+                data = data.replace("-","+").replace("_","/")
+                decoded_data = base64.b64decode(data)
+                soup = BeautifulSoup(decoded_data , "lxml")
+                links = str(soup.findAll("p")[0]).splitlines()
+                msg_id = msg['id']
+                first_link = [link.split('?')[0] for link in links if link[:5]=="https"][0]
+                query = """ INSERT INTO links(mail_id, link)
+                            VALUES(?,?);"""
+                cursor_links = self.db_links.cursor()
+                cursor_links.execute(query, (msg_id, first_link))
+                self.db_links.commit()
+                cursor_links.close()
+                if verbose: print(f"Loading release {msg['id']} in the DB.")
+            else:
+                if verbose: print(f"Release {msg['id']} is already in the DB.")
         return None
