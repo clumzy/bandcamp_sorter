@@ -129,4 +129,4 @@ dmypy.json
 .pyre/
 
 #MP3
-.mp3
+*.mp3
