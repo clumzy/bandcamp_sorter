@@ -116,6 +116,7 @@ class BandcampReader():
         return None
 
     def download_links(self)->None:
+
         cursor_links = self.db_links.cursor()
         query = """ 
             SELECT *
@@ -126,6 +127,6 @@ class BandcampReader():
             downloader = Downloader(
                 url = l[1],
                 out = "output/",
-                verbose=True,
+                verbose=False,
                 art_enabled=False)
             downloader.run()
