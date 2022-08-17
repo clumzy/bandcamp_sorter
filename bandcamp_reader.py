@@ -9,24 +9,112 @@ from googleapiclient.discovery import build
 
 import sqlite3
 
-import argparse
 import html
 import json
 import os
 import re
 import requests
 import sys
-
 from collections import namedtuple
+Album = namedtuple('Album', 'artist title release_date tracks')
+Track = namedtuple('Track', 'number title url duration released')
+
 
 from campdown import Downloader
 
 from tqdm import tqdm
 
+def decode(content):
+    """Decode the content of a Bandcamp page.
+    Args:
+        content (str): HTML content.
+    """
+
+    # Search album data.
+    matches = re.search('data-tralbum=\"([^\"]*)\"', content)
+
+    if not matches:
+        sys.exit('error: could not find any tracks.')
+
+    # Get album data.
+    data = matches.group(1)
+    # Decode HTML.
+    data = html.unescape(data)
+    # Decode to JSON.
+    data = json.loads(data)
+
+    return Album(
+        artist=data['artist'],
+        title=data['current']['title'],
+        release_date=data['current']['release_date'],
+        tracks=[Track(
+            number=track['track_num'],
+            title=track['title'],
+            url=(track['file'] or {}).get('mp3-128', None),
+            duration=track['duration'],
+            released=not track['unreleased_track']
+            ) for track in data['trackinfo']]
+    )
+
+
+def download(album, destination):
+    """Download a given album.
+    Args:
+        album (Album):     Album data.
+        destination (str): Destination of the files.
+        cover (bool):      Allow cover downloading (default: True).
+    """
+    # Create folder.
+    os.makedirs(destination, exist_ok=True)
+
+    print('Downloading album into %s' % destination)
+
+    # Notify for unreleased tracks.
+    if (any((not track.released for track in album.tracks))):
+        print('\nWARNING: some tracks are not released yet! '
+              'I will ignore them.\n')
+
+    # Download tracks.
+    for track in album.tracks:
+        if not track.released:
+            continue
+        title = re.sub(r'[\:\/\\]', '', track.title)  # Strip unwanted chars.
+        file = '%s. %s.mp3' % (track.number, title)
+        path = os.path.join(destination, file)
+        download_file(track.url, path, file)
+
+
+def download_file(url, target, name):
+    """Download a file.
+    Adapted from https://stackoverflow.com/q/15644964/9322103.
+    Args:
+        url (str):    URL of the file.
+        target (str): Target path.
+        name (str):   Title of the download.
+    """
+    with open(target, 'wb') as f:
+        response = requests.get(url, stream=True)
+        size = response.headers.get('content-length')
+
+        if size is None:
+            print('%s (unavailable)' % name)
+            return
+
+        downloaded = 0
+        size = int(size)
+        for data in response.iter_content(chunk_size=4096):
+            downloaded += len(data)
+            f.write(data)
+            progress = int(20 * downloaded / size)
+            sys.stdout.write(
+                '\r[%s%s] %s' % ('#' * progress, ' ' * (20 - progress), name))
+            sys.stdout.flush()
+        sys.stdout.write('\n')
+
+
 class BandcampReader():
 
     def __init__(self)->None:        
-        
         #AUTH PART
         #ICI ON VERIFIE ET CREE SI IL MANQUE LE TOKEN QUI NOUS PERMET
         #D'ACCEDER A L'API
@@ -116,7 +204,6 @@ class BandcampReader():
         return None
 
     def download_links(self)->None:
-
         cursor_links = self.db_links.cursor()
         query = """ 
             SELECT *
@@ -124,9 +211,10 @@ class BandcampReader():
         links = cursor_links.execute(query).fetchall()
         cursor_links.close()
         for l in tqdm(links[:]):
-            downloader = Downloader(
-                url = l[1],
-                out = "output/",
-                verbose=False,
-                art_enabled=False)
-            downloader.run()
+            try:
+                response = requests.get(l[1])
+            except Exception:
+                sys.exit('error: could not parse this page.')
+
+            album = decode(response.text)
+            download(album, destination="output/")
