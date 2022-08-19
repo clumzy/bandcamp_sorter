@@ -56,14 +56,19 @@ def decode(content):
             ) for track in data['trackinfo']]
     )
 
+def download(album:Album, destination)->str:
+    """A function that downloads the appropriate files from a Bandcamp album.
+    It returns the list of file paths.
 
-def download(album, destination):
-    """Download a given album.
     Args:
-        album (Album):     Album data.
-        destination (str): Destination of the files.
-        cover (bool):      Allow cover downloading (default: True).
-    """
+        album (Album): The Album in Album format, as described in the named Tuple in the file.
+        destination (str): Destination for the downloaded files.
+
+    Returns:
+        str: A CSV formatted list of filepaths.
+    """    
+    # Create array to store the filepaths
+    paths = []
     # Create folder.
     os.makedirs(destination, exist_ok=True)
 
@@ -79,12 +84,13 @@ def download(album, destination):
         if not track.released:
             continue
         title = re.sub(r'[\:\/\\]', '', track.title)  # Strip unwanted chars.
-        file = '%s. %s.mp3' % (track.number, title)
+        file = '%s - %s.mp3' % (title, album.artist)
         path = os.path.join(destination, file)
-        download_file(track.url, path, file)
+        downloaded = download_file(track.url, path, file)
+        if downloaded: paths.append(path)
+    return ",".join(paths)
 
-
-def download_file(url, target, name):
+def download_file(url, target, name)->bool:
     """Download a file.
     Adapted from https://stackoverflow.com/q/15644964/9322103.
     Args:
@@ -92,13 +98,16 @@ def download_file(url, target, name):
         target (str): Target path.
         name (str):   Title of the download.
     """
+    if not url:
+        print("Erreur sur le fichier.")
+        return False
     with open(target, 'wb') as f:
         response = requests.get(url, stream=True)
         size = response.headers.get('content-length')
 
         if size is None:
             print('%s (unavailable)' % name)
-            return
+            return False
 
         downloaded = 0
         size = int(size)
@@ -110,6 +119,7 @@ def download_file(url, target, name):
                 '\r[%s%s] %s' % ('#' * progress, ' ' * (20 - progress), name))
             sys.stdout.flush()
         sys.stdout.write('\n')
+    return True
 
 
 class BandcampReader():
@@ -162,7 +172,7 @@ class BandcampReader():
         
         # Call the Gmail API
         service = build('gmail', 'v1', credentials=self.creds)
-        mails = service.users().messages().list(userId='me',q="label:bandcamp-releases subject:'new+release'", maxResults=500).execute()
+        mails = service.users().messages().list(userId='me',q="label:bandcamp-releases subject:\"new+release\" -\"just+announced\" -\"SAMPLE+PACK\"", maxResults=500).execute()
         messages = mails.get('messages')
         # messages is a list of dictionaries where each dictionary contains a message id.
         # iterate through all the messages
@@ -176,38 +186,42 @@ class BandcampReader():
                 FROM LINKS"""
         ids = [id[0]for id in cursor_links.execute(query).fetchall()]
         cursor_links.close()
-        for msg in messages[:]:
-            if msg['id'] not in ids:
-                # Get the message from its id
-                txt = service.users().messages().get(userId='me', id=msg['id']).execute()
-                # Get value of 'payload' from dictionary 'txt'
-                payload = txt['payload']
-                # The Body of the message is in Encrypted format. So, we have to decode it.
-                # Get the data and decode it with base 64 decoder.
-                parts = payload.get('parts')[0]
-                data = parts['body']['data']
-                data = data.replace("-","+").replace("_","/")
-                decoded_data = base64.b64decode(data)
-                soup = BeautifulSoup(decoded_data , "lxml")
-                links = str(soup.findAll("p")[0]).splitlines()
-                msg_id = msg['id']
-                first_link = [link.split('?')[0] for link in links if link[:5]=="https"][0]
-                query = """ INSERT INTO links(mail_id, link)
-                            VALUES(?,?);"""
-                cursor_links = self.db_links.cursor()
-                cursor_links.execute(query, (msg_id, first_link))
-                self.db_links.commit()
-                cursor_links.close()
-                if verbose: print(f"Loading release {msg['id']} in the DB.")
-            else:
-                if verbose: print(f"Release {msg['id']} is already in the DB.")
+        if messages != None:
+            for msg in tqdm(messages[:]):
+                if msg['id'] not in ids:
+                    # Get the message from its id
+                    txt = service.users().messages().get(userId='me', id=msg['id']).execute()
+                    # Get value of 'payload' from dictionary 'txt'
+                    payload = txt['payload']
+                    # The Body of the message is in Encrypted format. So, we have to decode it.
+                    # Get the data and decode it with base 64 decoder.
+                    parts = payload.get('parts')[0]
+                    data = parts['body']['data']
+                    data = data.replace("-","+").replace("_","/")
+                    decoded_data = base64.b64decode(data)
+                    soup = BeautifulSoup(decoded_data , "lxml")
+                    links = str(soup.findAll("p")[0]).splitlines()
+                    msg_id = msg['id']
+                    first_link = [link.split('?')[0] for link in links if link[:5]=="https"][0]
+                    query = """ INSERT INTO links(mail_id, link)
+                                VALUES(?,?);"""
+                    cursor_links = self.db_links.cursor()
+                    cursor_links.execute(query, (msg_id, first_link))
+                    self.db_links.commit()
+                    cursor_links.close()
+                    if verbose: print(f"Loading release {msg['id']} in the DB.")
+                else:
+                    if verbose: print(f"Release {msg['id']} is already in the DB.")
+        else:
+            print("All the messages have already been downloaded.")
         return None
 
     def download_links(self)->None:
         cursor_links = self.db_links.cursor()
         query = """ 
             SELECT *
-            FROM links;"""
+            FROM links
+            WHERE location IS NULL;"""
         links = cursor_links.execute(query).fetchall()
         cursor_links.close()
         for l in tqdm(links[:]):
@@ -215,6 +229,13 @@ class BandcampReader():
                 response = requests.get(l[1])
             except Exception:
                 sys.exit('error: could not parse this page.')
-
             album = decode(response.text)
-            download(album, destination="output/")
+            locations = download(album, destination="output/")
+            cursor_links = self.db_links.cursor()
+            query = """
+                    UPDATE links
+                    SET location = ?
+                    WHERE mail_id == ?"""
+            cursor_links.execute(query, (locations, l[0]))
+            self.db_links.commit()
+            cursor_links.close()
