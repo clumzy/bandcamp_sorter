@@ -21,7 +21,6 @@ Track = namedtuple('Track', 'number title url duration released')
 
 
 from campdown import Downloader
-
 from tqdm import tqdm
 
 def decode(content):
@@ -84,11 +83,11 @@ def download(album:Album, destination)->str:
         if not track.released:
             continue
         title = re.sub(r'[\:\/\\]', '', track.title)  # Strip unwanted chars.
-        file = '%s - %s.mp3' % (title, album.artist)
+        file = '%s - %s.mp3' % (album.artist, title)
         path = os.path.join(destination, file)
         downloaded = download_file(track.url, path, file)
         if downloaded: paths.append(path)
-    return ",".join(paths)
+    return ";".join(paths)
 
 def download_file(url, target, name)->bool:
     """Download a file.
@@ -123,13 +122,14 @@ def download_file(url, target, name)->bool:
 
 
 class BandcampReader():
-
     def __init__(self)->None:        
         #AUTH PART
         #ICI ON VERIFIE ET CREE SI IL MANQUE LE TOKEN QUI NOUS PERMET
         #D'ACCEDER A L'API
 
-        SCOPES = ['https://www.googleapis.com/auth/gmail.readonly']
+        SCOPES = [
+            'https://www.googleapis.com/auth/gmail.readonly',
+            'https://www.googleapis.com/auth/gmail.modify']
         self.creds = None
         # The file token.json stores the user's access and refresh tokens, and is
         # created automatically when the authorization flow completes for the first
@@ -168,8 +168,7 @@ class BandcampReader():
             print("Table links has been found. Connecting now !")
         cursor_links.close()
 
-    def load_releases(self, verbose = False):
-        
+    def load_releases(self, verbose = False):  
         # Call the Gmail API
         service = build('gmail', 'v1', credentials=self.creds)
         mails = service.users().messages().list(userId='me',q="label:bandcamp-releases subject:\"new+release\" -\"just+announced\" -\"SAMPLE+PACK\"", maxResults=500).execute()
@@ -239,3 +238,17 @@ class BandcampReader():
             cursor_links.execute(query, (locations, l[0]))
             self.db_links.commit()
             cursor_links.close()
+
+    def remove_tracks_from_gmail(self)->None:
+        cursor_links = self.db_links.cursor()
+        query = """ 
+            SELECT *
+            FROM links
+            WHERE location IS NOT NULL;"""
+        links = cursor_links.execute(query).fetchall()
+        cursor_links.close()
+        missing_links = []
+        for l in links:
+            locations = [os.path.exists(loc) for loc in l[2].split(';')]
+            if False in locations: missing_links.append((l[0], l[1]))
+        print(missing_links)
