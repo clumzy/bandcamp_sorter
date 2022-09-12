@@ -71,8 +71,6 @@ def download(album:Album, destination)->str:
     # Create folder.
     os.makedirs(destination, exist_ok=True)
 
-    print('Downloading album into %s' % destination)
-
     # Notify for unreleased tracks.
     if (any((not track.released for track in album.tracks))):
         print('\nWARNING: some tracks are not released yet! '
@@ -113,11 +111,6 @@ def download_file(url, target, name)->bool:
         for data in response.iter_content(chunk_size=4096):
             downloaded += len(data)
             f.write(data)
-            progress = int(20 * downloaded / size)
-            sys.stdout.write(
-                '\r[%s%s] %s' % ('#' * progress, ' ' * (20 - progress), name))
-            sys.stdout.flush()
-        sys.stdout.write('\n')
     return True
 
 
