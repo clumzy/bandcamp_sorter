@@ -14,6 +14,7 @@ import json
 import os
 import re
 import requests
+import urllib.request
 import sys
 from collections import namedtuple
 Album = namedtuple('Album', 'artist title release_date tracks')
@@ -98,19 +99,9 @@ def download_file(url, target, name)->bool:
     if not url:
         print("Erreur sur le fichier.")
         return False
-    with open(target, 'wb') as f:
-        response = requests.get(url, stream=True)
-        size = response.headers.get('content-length')
-
-        if size is None:
-            print('%s (unavailable)' % name)
-            return False
-
-        downloaded = 0
-        size = int(size)
-        for data in response.iter_content(chunk_size=4096):
-            downloaded += len(data)
-            f.write(data)
+    urllib.request.urlretrieve(
+        url, 
+        target)
     return True
 
 
@@ -208,14 +199,18 @@ class BandcampReader():
             print("All the messages have already been downloaded.")
         return None
 
-    def download_links(self)->None:
+    def download_links(self, redownload_missing = False)->None:
         cursor_links = self.db_links.cursor()
-        query = """ 
-            SELECT *
-            FROM links
-            WHERE location IS NULL;"""
-        links = cursor_links.execute(query).fetchall()
-        cursor_links.close()
+        if not redownload_missing:
+            query = """ 
+                SELECT *
+                FROM links
+                WHERE location IS NULL;"""
+            links = cursor_links.execute(query).fetchall()
+            cursor_links.close()
+        else:
+            links = self.remove_tracks_from_gmail()
+        
         for l in tqdm(links[:]):
             try:
                 response = requests.get(l[1])
@@ -232,7 +227,7 @@ class BandcampReader():
             self.db_links.commit()
             cursor_links.close()
 
-    def remove_tracks_from_gmail(self)->None:
+    def remove_tracks_from_gmail(self)->list:
         cursor_links = self.db_links.cursor()
         query = """ 
             SELECT *
@@ -244,4 +239,4 @@ class BandcampReader():
         for l in links:
             locations = [os.path.exists(loc) for loc in l[2].split(';')]
             if False in locations: missing_links.append((l[0], l[1]))
-        print(missing_links)
+        return missing_links
