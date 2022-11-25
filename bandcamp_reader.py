@@ -1,28 +1,28 @@
-import os.path
 import base64
-from bs4 import BeautifulSoup
+import html
+import json
+import os
+import os.path
+import re
+import sqlite3
+import sys
+import urllib.request
+from collections import namedtuple
 
+import requests
+from bs4 import BeautifulSoup
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
 
-import sqlite3
-
-import html
-import json
-import os
-import re
-import requests
-import urllib.request
-import sys
-from collections import namedtuple
 Album = namedtuple('Album', 'artist title release_date tracks')
 Track = namedtuple('Track', 'number title url duration released')
 
 
 from campdown import Downloader
 from tqdm import tqdm
+
 
 def decode(content):
     """Decode the content of a Bandcamp page.
@@ -34,7 +34,7 @@ def decode(content):
     matches = re.search('data-tralbum=\"([^\"]*)\"', content)
 
     if not matches:
-        sys.exit('error: could not find any tracks.')
+        return None
 
     # Get album data.
     data = matches.group(1)
@@ -82,7 +82,8 @@ def download(album:Album, destination)->str:
         if not track.released:
             continue
         title = re.sub(r'[\:\/\\]', '', track.title)  # Strip unwanted chars.
-        file = '%s - %s.mp3' % (album.artist, title)
+        artist = re.sub(r'[\:\/\\]', '', album.artist) 
+        file = '%s - %s.mp3' % (artist, title)
         path = os.path.join(destination, file)
         downloaded = download_file(track.url, path, file)
         if downloaded: paths.append(path)
@@ -210,22 +211,31 @@ class BandcampReader():
             cursor_links.close()
         else:
             links = self.remove_tracks_from_gmail()
-        
         for l in tqdm(links[:]):
             try:
                 response = requests.get(l[1])
             except Exception:
                 sys.exit('error: could not parse this page.')
             album = decode(response.text)
-            locations = download(album, destination="output/")
-            cursor_links = self.db_links.cursor()
-            query = """
-                    UPDATE links
-                    SET location = ?
-                    WHERE mail_id == ?"""
-            cursor_links.execute(query, (locations, l[0]))
-            self.db_links.commit()
-            cursor_links.close()
+            if album != None:
+                locations = download(album, destination="output/")
+                cursor_links = self.db_links.cursor()
+                query = """
+                        UPDATE links
+                        SET location = ?
+                        WHERE mail_id == ?"""
+                cursor_links.execute(query, (locations, l[0]))
+                self.db_links.commit()
+                cursor_links.close()
+            else:
+                cursor_links = self.db_links.cursor()
+                query = """
+                        DELETE
+                        FROM links
+                        WHERE mail_id = ?"""
+                cursor_links.execute(query, (l[0],))
+                self.db_links.commit()
+                cursor_links.close()
 
     def remove_tracks_from_gmail(self)->list:
         cursor_links = self.db_links.cursor()
