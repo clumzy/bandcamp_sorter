@@ -84,6 +84,7 @@ def download(album:Album, destination)->str:
         title = re.sub(r'[\:\/\\]', '', track.title)  # Strip unwanted chars.
         artist = re.sub(r'[\:\/\\]', '', album.artist) 
         file = '%s - %s.mp3' % (artist, title)
+        file = file.replace("|","").replace("?","").strip()
         path = os.path.join(destination, file)
         downloaded = download_file(track.url, path, file)
         if downloaded: paths.append(path)
@@ -98,7 +99,7 @@ def download_file(url, target, name)->bool:
         name (str):   Title of the download.
     """
     if not url:
-        print("Erreur sur le fichier.")
+        print(f"Erreur sur le fichier {name}")
         return False
     urllib.request.urlretrieve(
         url, 
