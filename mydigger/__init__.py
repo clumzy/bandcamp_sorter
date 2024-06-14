@@ -1,0 +1,1 @@
+from .MyDiggerApp import MyDiggerApp

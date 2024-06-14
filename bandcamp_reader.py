@@ -84,7 +84,14 @@ def download(album:Album, destination)->str:
         title = re.sub(r'[\:\/\\]', '', track.title)  # Strip unwanted chars.
         artist = re.sub(r'[\:\/\\]', '', album.artist) 
         file = '%s - %s.mp3' % (artist, title)
-        file = file.replace("|","").replace("?","").strip()
+        file = file.replace(
+            "|","").replace(
+                "?","").replace(
+                    "ø","").replace(
+                        "+", "").replace(
+                            "=", "").replace(
+                                "<", "").strip()
+        print(file)
         path = os.path.join(destination, file)
         downloaded = download_file(track.url, path, file)
         if downloaded: paths.append(path)
@@ -166,10 +173,10 @@ class BandcampReader():
         # Des id déjà existants dans la BDD
 
         cursor_links = self.db_links.cursor()
-        query = """ 
+        query = """
                 SELECT mail_id
                 FROM LINKS"""
-        ids = [id[0]for id in cursor_links.execute(query).fetchall()]
+        ids = [id[0] for id in cursor_links.execute(query).fetchall()]
         cursor_links.close()
         if messages != None:
             for msg in tqdm(messages[:]):
@@ -185,15 +192,21 @@ class BandcampReader():
                     data = data.replace("-","+").replace("_","/")
                     decoded_data = base64.b64decode(data)
                     soup = BeautifulSoup(decoded_data , "lxml")
-                    links = str(soup.findAll("p")[0]).splitlines()
-                    msg_id = msg['id']
-                    first_link = [link.split('?')[0] for link in links if link[:5]=="https"][0]
-                    query = """ INSERT INTO links(mail_id, link)
+                    # Find all <p> tags
+                    paragraphs = soup.findAll("p")
+                    # Check if any <p> tags were found
+                    if paragraphs:
+                        links = str(paragraphs[0]).splitlines()
+                        msg_id = msg['id']
+                        first_link = [link.split('?')[0] for link in links if link[:5]=="https"][0]
+                        query = """ INSERT INTO links(mail_id, link)
                                 VALUES(?,?);"""
-                    cursor_links = self.db_links.cursor()
-                    cursor_links.execute(query, (msg_id, first_link))
-                    self.db_links.commit()
-                    cursor_links.close()
+                        cursor_links = self.db_links.cursor()
+                        cursor_links.execute(query, (msg_id, first_link))
+                        self.db_links.commit()
+                        cursor_links.close()
+                    else:
+                        print("No <p> tags found in the email.")
                     if verbose: print(f"Loading release {msg['id']} in the DB.")
                 else:
                     if verbose: print(f"Release {msg['id']} is already in the DB.")
@@ -237,17 +250,3 @@ class BandcampReader():
                 cursor_links.execute(query, (l[0],))
                 self.db_links.commit()
                 cursor_links.close()
-
-    def remove_tracks_from_gmail(self)->list:
-        cursor_links = self.db_links.cursor()
-        query = """ 
-            SELECT *
-            FROM links
-            WHERE location IS NOT NULL;"""
-        links = cursor_links.execute(query).fetchall()
-        cursor_links.close()
-        missing_links = []
-        for l in links:
-            locations = [os.path.exists(loc) for loc in l[2].split(';')]
-            if False in locations: missing_links.append((l[0], l[1]))
-        return missing_links
