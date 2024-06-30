@@ -1,5 +1,5 @@
 from textual.app import ComposeResult
-from textual.containers import Horizontal
+from textual.containers import Horizontal, Vertical
 from textual.widgets import ListView, ListItem, Label, Static
 from textual.reactive import reactive
 
