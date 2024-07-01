@@ -9,31 +9,31 @@ class FilesPanel(Horizontal):
     playlist_init = "D:/George/Documents/Code/clumzy/bandcamp_sorter"
     files_loc = ""
     playlist_loc = ""
-    mail_pane:Vertical = Vertical(
+    files_pane:Vertical = Vertical(
         Label("Select directory to scan :", id="files_label"),
         DirectoryTree(path=files_init, disabled=False, id="files_dir"),
         Button("Select the current directory", id="files_button"))
-    mail_pane.styles.width = "45%"
+    files_pane.styles.width = "45%"
     divider = Static()
     divider.styles.width = "5%"
-    bdd_pane = Vertical(
+    playlist_pane = Vertical(
         Label("Select directory to save playlists :", id="playlist_label"),
         DirectoryTree(path=playlist_init, disabled=False, id="playlist_dir"),
         Button("Select the current directory", id="playlist_button"))
-    bdd_pane.styles.width = "45%"
+    playlist_pane.styles.width = "45%"
 
     def compose(self) ->ComposeResult:
         yield Horizontal(
-            self.mail_pane,
+            self.files_pane,
             self.divider,
-            self.bdd_pane)
+            self.playlist_pane)
     
     def on_button_pressed(self, event: Button.Pressed) -> None:
         if event.button.id == "files_button":
-            self.mail_pane.get_child_by_id("files_dir").disabled = True
+            self.files_pane.get_child_by_id("files_dir").disabled = True
         elif event.button.id == "playlist_button":
-            self.bdd_pane.get_child_by_id("playlist_dir").disabled = True
-        if self.mail_pane.get_child_by_id("files_dir").disabled & self.bdd_pane.get_child_by_id("playlist_dir").disabled:
+            self.playlist_pane.get_child_by_id("playlist_dir").disabled = True
+        if self.files_pane.get_child_by_id("files_dir").disabled & self.playlist_pane.get_child_by_id("playlist_dir").disabled:
             self.parent.parent.parent.active = "ia_panel"
             self.parent.parent.parent.active_pane.get_child_by_id("ia_content").files_init = self.files_loc
             self.parent.parent.parent.active_pane.get_child_by_id("ia_content").playlist_init = self.playlist_loc
