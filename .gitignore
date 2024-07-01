@@ -136,8 +136,3 @@ dmypy.json
 
 #token
 *.json
-*.m3u
-
-#model
-*.mdl
-mydigger/ai/tagmytechno/mdl.keras
