@@ -1,3 +1,3 @@
 from .ContentFrame import ContentFrame
 from .FilesPanel import FilesPanel
-from .IAPanel import IAPanel
+from .IAPanel import IAPanel, TuneItem

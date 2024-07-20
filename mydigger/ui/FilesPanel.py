@@ -5,24 +5,24 @@ from textual.reactive import reactive
 from textual import log
 
 class FilesPanel(Horizontal):
-    files_init = "D:/George"
-    playlist_init = "D:/George/Documents/Code/clumzy/bandcamp_sorter"
-    files_loc = ""
-    playlist_loc = ""
-    files_pane:Vertical = Vertical(
-        Label("Select directory to scan :", id="files_label"),
-        DirectoryTree(path=files_init, disabled=False, id="files_dir"),
-        Button("Select the current directory", id="files_button"))
-    files_pane.styles.width = "45%"
-    divider = Static()
-    divider.styles.width = "5%"
-    playlist_pane = Vertical(
-        Label("Select directory to save playlists :", id="playlist_label"),
-        DirectoryTree(path=playlist_init, disabled=False, id="playlist_dir"),
-        Button("Select the current directory", id="playlist_button"))
-    playlist_pane.styles.width = "45%"
-
+    
     def compose(self) ->ComposeResult:
+        self.files_init = "D:/George"
+        self.playlist_init = "D:/George/Documents/Code/clumzy/bandcamp_sorter"
+        self.files_loc = ""
+        self.playlist_loc = ""
+        self.files_pane:Vertical = Vertical(
+            Label("Select directory to scan :", id="files_label"),
+            DirectoryTree(path=self.files_init, disabled=False, id="files_dir"),
+            Button("Select the current directory", id="files_button"))
+        self.files_pane.styles.width = "45%"
+        self.divider = Static()
+        self.divider.styles.width = "5%"
+        self.playlist_pane = Vertical(
+            Label("Select directory to save playlists :", id="playlist_label"),
+            DirectoryTree(path=self.playlist_init, disabled=False, id="playlist_dir"),
+            Button("Select the current directory", id="playlist_button"))
+        self.playlist_pane.styles.width = "45%"
         yield Horizontal(
             self.files_pane,
             self.divider,
